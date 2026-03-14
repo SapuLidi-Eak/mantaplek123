@@ -93,46 +93,41 @@ task.spawn(function()
 
     task.wait(1.5)
 
-    -- Helper: coba semua cara fire button yang ada
+    -- Helper: coba satu cara dulu, kalau berhasil STOP
+    -- JANGAN fire semua cara sekaligus — bisa trigger anti-cheat!
     local function clickBtn(btn)
-        if not btn then return end
-        
-        local success = false
-        -- Cara 1: getconnections (Paling Ampuh kalau disupport Executor)
+        if not btn then return false end
+
+        -- Cara 1: VirtualInputManager — paling "natural", mirip klik mouse beneran
+        local ok1 = pcall(function()
+            local VIM = game:GetService("VirtualInputManager")
+            local pos = btn.AbsolutePosition
+            local size = btn.AbsoluteSize
+            local cx = pos.X + size.X / 2
+            local cy = pos.Y + size.Y / 2 + 36
+            VIM:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+            task.wait(0.08)
+            VIM:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+        end)
+        if ok1 then task.wait(0.3) return true end
+
+        -- Cara 2: firesignal — fallback kalau VIM gagal
+        local ok2 = false
+        pcall(function() firesignal(btn.MouseButton1Click) ok2 = true end)
+        if ok2 then task.wait(0.3) return true end
+
+        -- Cara 3: getconnections — last resort
         if getconnections then
             pcall(function()
                 for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
                     conn:Fire()
-                    success = true
-                end
-                for _, conn in pairs(getconnections(btn.Activated)) do
-                    conn:Fire()
-                    success = true
                 end
             end)
+            task.wait(0.3)
+            return true
         end
-        
-        -- Cara 2: VirtualInputManager (Simulasi klik fisik mouse di tengah tombol)
-        pcall(function()
-            local VIM = game:GetService("VirtualInputManager")
-            local pos = btn.AbsolutePosition
-            local size = btn.AbsoluteSize
-            local centerX = pos.X + (size.X / 2)
-            local centerY = pos.Y + (size.Y / 2)
-            -- offset sedikit ke bawah judul bar / topbar (biasanya di roblox gui ditambah offset, tapi ini cukup)
-            VIM:SendMouseButtonEvent(centerX, centerY + 36, 0, true, game, 1)
-            task.wait(0.05)
-            VIM:SendMouseButtonEvent(centerX, centerY + 36, 0, false, game, 1)
-            success = true
-        end)
 
-        -- Cara 3: firesignal / Fire()
-        pcall(function() firesignal(btn.MouseButton1Click) success = true end)
-        pcall(function() firesignal(btn.Activated) success = true end)
-        pcall(function() btn.MouseButton1Click:Fire() success = true end)
-        pcall(function() btn.Activated:Fire() success = true end)
-
-        return success
+        return false
     end
 
     -- Step 1: Klik PLAY di HOME screen (applySelect)
@@ -536,36 +531,13 @@ end
 local function getCarList()
     local carNames = {}
     pcall(function()
-        -- Guard: pastikan MainUI sudah exist dan game sudah loaded
-        -- Kalau MainUI belum ada (masih loading screen), langsung return placeholder
-        local playerGui = LocalPlayer.PlayerGui
-        local mainUI = playerGui:FindFirstChild("MainUI")
-        if not mainUI or not mainUI.Enabled then
-            -- MainUI belum ada atau belum aktif = game belum fully loaded, skip
-            return
-        end
-
-        -- Extra buffer: tunggu 3 detik lagi biar server-side fully ready
-        task.wait(3)
-
-        -- Cek ulang setelah buffer, pastikan masih valid
-        mainUI = playerGui:FindFirstChild("MainUI")
-        if not mainUI or not mainUI.Enabled then return end
-
-        local frame = mainUI:WaitForChild("Frame", 5)
-        if not frame then return end
-        local spawnParent = mainUI:WaitForChild("Spawn", 5)
-        if not spawnParent then return end
-        local spawnBtn = spawnParent:WaitForChild("SpawnCar", 5)
-        if not spawnBtn then return end
-
+        local mainUI = LocalPlayer.PlayerGui:WaitForChild("MainUI")
+        local frame = mainUI:WaitForChild("Frame")
+        local spawnBtn = mainUI:WaitForChild("Spawn"):WaitForChild("SpawnCar")
         frame.Visible = false
         firesignal(spawnBtn.MouseButton1Click)
         task.wait(2)
-        local mainFrame = frame:WaitForChild("MainFrame", 5)
-        if not mainFrame then return end
-        local sf = mainFrame:WaitForChild("ScrollingFrame", 5)
-        if not sf then return end
+        local sf = frame:WaitForChild("MainFrame"):WaitForChild("ScrollingFrame")
         for _, v in ipairs(sf:GetChildren()) do
             if v.ClassName:sub(1,2) ~= "UI" then
                 table.insert(carNames, v.Name)
@@ -1427,10 +1399,7 @@ SlowSection:AddToggle({
 -- GUI - TAB GARAGE
 -- =============================================
 
--- JANGAN panggil getCarList() saat init karena game belum tentu loaded
--- (terutama saat auto-rejoin: script dieksekusi saat masih loading screen)
--- List akan di-refresh manual oleh user lewat tombol "Refresh List Kendaraan"
-local initialCarList = { "Refresh dulu..." }
+local initialCarList = getCarList()
 
 local GarageTab = Window:AddTab({ Name = "Garage", Icon = "menu" })
 local GarageSection = GarageTab:AddSection("Spawn Kendaraan")
@@ -1447,7 +1416,7 @@ local carDropdown = GarageSection:AddDropdown({
         end
     end
 })
-SpawnCar.SelectedCar = nil -- default nil, user harus Refresh List dulu setelah masuk game
+SpawnCar.SelectedCar = initialCarList[1] ~= "Refresh dulu..." and initialCarList[1] or nil
 
 GarageSection:AddButton({
     Title = "Refresh List Kendaraan",
@@ -1751,7 +1720,7 @@ local AutoRejoin = (function()
     -- WARNING: Ganti SCRIPT_URL dengan URL script UTAMA (misal pastebin/github raw cobadds.lua lo)
     -- JANGAN pakai URL vyperui.lua karena itu cuma UI-nya saja!
     local SCRIPT_URL = "https://raw.githubusercontent.com/SapuLidi-Eak/mantaplek123/refs/heads/main/coba.lua" 
-    local EXEC_DELAY = 25 -- detik tunggu sebelum execute setelah rejoin (dilebihin dikit biar game load)
+    local EXEC_DELAY = 20 -- detik tunggu sebelum execute setelah rejoin (dilebihin dikit biar game load)
 
     -- Cari queue_on_teleport dari berbagai executor secara aman
     local function getQueueOnTeleport()

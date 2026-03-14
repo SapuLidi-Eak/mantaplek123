@@ -4873,7 +4873,7 @@ local AutoRejoin = (function()
     -- JANGAN pakai URL vyperui.lua karena itu cuma UI-nya saja!
     local SCRIPT_URL = "https://raw.githubusercontent.com/SapuLidi-Eak/mantaplek123/refs/heads/main/coba.lua" 
     local EXEC_DELAY = 30 -- detik tunggu sebelum execute setelah rejoin (dilebihin dikit biar game load)
-
+    task.wait(10)
     -- Cari queue_on_teleport dari berbagai executor secara aman
     local function getQueueOnTeleport()
         local getQueue = nil

@@ -75,16 +75,13 @@ local isMobileDevice = UIS.TouchEnabled and not UIS.KeyboardEnabled
 -- =============================================
 
 task.spawn(function()
+    local LocalPlayer = game:GetService("Players").LocalPlayer
     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    -- Tunggu mainMenuSystem ada (muncul di lobby)
     local mainMenu = playerGui:WaitForChild("mainMenuSystem", 10)
     if not mainMenu then return end
-
-    -- Kalau menu tidak aktif, skip
     if not mainMenu.Enabled then return end
 
-    -- Kalau MainUI sudah aktif = sudah di dalam game, skip
     local mainUI = playerGui:FindFirstChild("MainUI")
     if mainUI and mainUI.Enabled then return end
 
@@ -93,81 +90,36 @@ task.spawn(function()
 
     task.wait(1.5)
 
-    -- Helper: coba satu cara dulu, kalau berhasil STOP
-    -- JANGAN fire semua cara sekaligus — bisa trigger anti-cheat!
     local function clickBtn(btn)
-        if not btn then return false end
-
-        -- Cara 1: VirtualInputManager — paling "natural", mirip klik mouse beneran
-        local ok1 = pcall(function()
-            local VIM = game:GetService("VirtualInputManager")
-            local pos = btn.AbsolutePosition
-            local size = btn.AbsoluteSize
-            local cx = pos.X + size.X / 2
-            local cy = pos.Y + size.Y / 2 + 36
-            VIM:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
-            task.wait(0.08)
-            VIM:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-        end)
-        if ok1 then task.wait(0.3) return true end
-
-        -- Cara 2: firesignal — fallback kalau VIM gagal
-        local ok2 = false
-        pcall(function() firesignal(btn.MouseButton1Click) ok2 = true end)
-        if ok2 then task.wait(0.3) return true end
-
-        -- Cara 3: getconnections — last resort
-        if getconnections then
-            pcall(function()
-                for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-                    conn:Fire()
-                end
-            end)
-            task.wait(0.3)
-            return true
-        end
-
-        return false
+        if not btn then return end
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+        pcall(function() btn.MouseButton1Click:Fire() end)
+        pcall(function() btn.Activated:Fire() end)
     end
 
-    -- Step 1: Klik PLAY di HOME screen (applySelect)
     local applySelect = nil
     pcall(function()
-        applySelect = baseFrame
-            :FindFirstChild("homeFrame")
-            :FindFirstChild("playFrame")
-            :FindFirstChild("applySelect")
+        applySelect = baseFrame:FindFirstChild("homeFrame"):FindFirstChild("playFrame"):FindFirstChild("applySelect")
     end)
     print("[AutoSkip] applySelect found:", applySelect ~= nil)
     clickBtn(applySelect)
-
     task.wait(1.5)
 
-    -- Step 2: Pilih team Barista (teamFiveTeamSelect)
     local baristaBtn = nil
     pcall(function()
-        baristaBtn = baseFrame
-            :FindFirstChild("playFrame")
-            :FindFirstChild("ScrollingFrame")
-            :FindFirstChild("teamFiveTeamSelect")
+        baristaBtn = baseFrame:FindFirstChild("playFrame"):FindFirstChild("ScrollingFrame"):FindFirstChild("teamFiveTeamSelect")
     end)
     print("[AutoSkip] baristaBtn found:", baristaBtn ~= nil)
     clickBtn(baristaBtn)
-
     task.wait(0.8)
 
-    -- Step 3: Klik PLAY/Deploy di TEAMS screen (deploySelect)
     local deploySelect = nil
     pcall(function()
-        deploySelect = baseFrame
-            :FindFirstChild("playFrame")
-            :FindFirstChild("deploySelect")
+        deploySelect = baseFrame:FindFirstChild("playFrame"):FindFirstChild("deploySelect")
     end)
     print("[AutoSkip] deploySelect found:", deploySelect ~= nil)
     clickBtn(deploySelect)
 
-    -- Step 4: Tunggu masuk game = MainUI jadi Enabled
-    -- (mainMenu.Enabled kadang tidak berubah, jadi cek MainUI saja)
     local timeout = tick() + 30
     local entered = false
     while tick() < timeout do
@@ -179,10 +131,8 @@ task.spawn(function()
         task.wait(0.5)
     end
     print("[AutoSkip] Entered game:", entered)
+    task.wait(3)
 
-    task.wait(3) -- buffer biar character & game load sempurna
-
-    -- Step 5: Auto trigger Barista kalau user sudah aktifin
     if entered and baristaRunning == false and SpawnCar.SelectedCar and SpawnCar.SelectedCar ~= "Refresh dulu..." then
         print("[AutoSkip] Auto starting Barista loop...")
         task.spawn(startBaristaLoop)

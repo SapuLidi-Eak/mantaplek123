@@ -576,6 +576,73 @@ end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- task.spawn(function()
+--     math.randomseed(os.clock() * 1000)
+
+--     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+--     local baristaGui = playerGui:FindFirstChild("BaristaGUI")
+--     while not baristaGui do
+--         task.wait(1)
+--         baristaGui = playerGui:FindFirstChild("BaristaGUI")
+--     end
+
+--     local minigame     = baristaGui:WaitForChild("MinigameFrame")
+--     local bgBar        = minigame:WaitForChild("BackgroundBar")
+--     local tapZone      = minigame:WaitForChild("TapZone")
+--     local targetZone   = bgBar:WaitForChild("TargetZone")
+--     local playerCursor = bgBar:WaitForChild("PlayerCursor")
+
+--     local function tap()
+--         local r = math.random(1, 3)
+--         if r == 1 then
+--             pcall(function() firesignal(tapZone.MouseButton1Click) end)
+--         elseif r == 2 then
+--             pcall(function() firesignal(tapZone.MouseButton1Down) end)
+--             task.wait(math.random(5, 15) * 0.01)
+--             pcall(function() firesignal(tapZone.MouseButton1Up) end)
+--         else
+--             pcall(function() firesignal(tapZone.MouseButton1Click) end)
+--         end
+--     end
+
+--     local lastTapTime = 0
+
+--     while true do
+--         task.wait(math.random(10, 25) * 0.001)
+
+--         if not minigame.Visible then
+--             task.wait(0.2)
+--             continue
+--         end
+
+--         local targetMid = targetZone.AbsolutePosition.Y + targetZone.AbsoluteSize.Y / 2
+--         local cursorMid = playerCursor.AbsolutePosition.Y + playerCursor.AbsoluteSize.Y / 2
+--         local diff = cursorMid - targetMid
+--         local now = tick()
+
+--         if diff > 10 then
+--             -- Bar putih di BAWAH kapsul kuning → tap buat naik
+--             local urgency = math.clamp(diff / 80, 0.3, 1.0)
+--             local interval = math.random(30, 70) * 0.001 / urgency
+--             if now - lastTapTime >= interval then
+--                 tap()
+--                 lastTapTime = now
+--             end
+--         elseif diff > -10 then
+--             -- Sudah sejajar → tap pelan buat maintain
+--             if math.random(1, 100) <= 20 then
+--                 local interval = math.random(80, 150) * 0.001
+--                 if now - lastTapTime >= interval then
+--                     tap()
+--                     lastTapTime = now
+--                 end
+--             end
+--         end
+--         -- diff < -10 = cursor di atas → jangan tap, tunggu turun sendiri
+--     end
+-- end)
+
 task.spawn(function()
     math.randomseed(os.clock() * 1000)
 
@@ -594,52 +661,53 @@ task.spawn(function()
     local playerCursor = bgBar:WaitForChild("PlayerCursor")
 
     local function tap()
-        local r = math.random(1, 3)
+        local r = math.random(1, 2)
         if r == 1 then
             pcall(function() firesignal(tapZone.MouseButton1Click) end)
-        elseif r == 2 then
-            pcall(function() firesignal(tapZone.MouseButton1Down) end)
-            task.wait(math.random(5, 15) * 0.01)
-            pcall(function() firesignal(tapZone.MouseButton1Up) end)
         else
-            pcall(function() firesignal(tapZone.MouseButton1Click) end)
+            pcall(function() firesignal(tapZone.MouseButton1Down) end)
+            task.wait(math.random(3, 8) * 0.01)
+            pcall(function() firesignal(tapZone.MouseButton1Up) end)
         end
     end
 
     local lastTapTime = 0
 
     while true do
-        task.wait(math.random(10, 25) * 0.001)
+        task.wait(math.random(10, 20) * 0.001)
 
         if not minigame.Visible then
             task.wait(0.2)
             continue
         end
 
-        local targetMid = targetZone.AbsolutePosition.Y + targetZone.AbsoluteSize.Y / 2
+        local targetPos  = targetZone.AbsolutePosition.Y
+        local targetSize = targetZone.AbsoluteSize.Y
+        local targetTop  = targetPos
+        local targetBot  = targetPos + targetSize
+
         local cursorMid = playerCursor.AbsolutePosition.Y + playerCursor.AbsoluteSize.Y / 2
-        local diff = cursorMid - targetMid
         local now = tick()
 
-        if diff > 10 then
-            -- Bar putih di BAWAH kapsul kuning → tap buat naik
-            local urgency = math.clamp(diff / 80, 0.3, 1.0)
-            local interval = math.random(30, 70) * 0.001 / urgency
+        if cursorMid > targetBot then
+            -- Cursor di bawah target → tap lebih sering buat naik
+            local diff = cursorMid - targetBot
+            local interval = math.max(0.02, 0.08 - (diff / 500))
             if now - lastTapTime >= interval then
                 tap()
-                lastTapTime = now
+                lastTapTime = tick()
             end
-        elseif diff > -10 then
-            -- Sudah sejajar → tap pelan buat maintain
-            if math.random(1, 100) <= 20 then
-                local interval = math.random(80, 150) * 0.001
+        elseif cursorMid >= targetTop and cursorMid <= targetBot then
+            -- Cursor di dalam target → tap pelan maintain
+            if math.random(1, 100) <= 30 then
+                local interval = math.random(60, 100) * 0.001
                 if now - lastTapTime >= interval then
                     tap()
-                    lastTapTime = now
+                    lastTapTime = tick()
                 end
             end
         end
-        -- diff < -10 = cursor di atas → jangan tap, tunggu turun sendiri
+        -- Cursor di atas target → jangan tap sama sekali
     end
 end)
 
@@ -1415,6 +1483,72 @@ GarageSection:AddToggle({
 })
 
 -- =============================================
+-- AUTO MONEY LIMIT + REJOIN MODULE
+-- =============================================
+
+local AutoMoneyLimit = (function()
+    local AML = {}
+    AML.Enabled = false
+    AML.LimitAmount = 70000000 -- default 70 juta
+    AML.Thread = nil
+
+    -- Parse "Rp 70.000.000" atau "Rp70000000" → angka
+    local function parseRupiah(text)
+        if not text or text == "" then return 0 end
+        -- Hapus semua non-digit (Rp, titik, koma, spasi, dll)
+        local clean = text:gsub("%D", "")
+        return tonumber(clean) or 0
+    end
+
+    function AML.Start()
+        if AML.Enabled then return end
+        AML.Enabled = true
+
+        AML.Thread = task.spawn(function()
+            print("[AutoMoneyLimit] Monitor uang aktif. Limit:", AML.LimitAmount)
+            while AML.Enabled do
+                task.wait(1)
+                if not AML.Enabled then break end
+
+                local ok, amount = pcall(function()
+                    local label = LocalPlayer.PlayerGui
+                        :WaitForChild("BaristaMissionUI", 1)
+                        :WaitForChild("Container", 1)
+                        :WaitForChild("MainFrame", 1)
+                        :WaitForChild("Frame", 1)
+                        :WaitForChild("TotalLabel", 1)
+                    return parseRupiah(label.Text)
+                end)
+
+                if ok and amount >= AML.LimitAmount then
+                    print("[AutoMoneyLimit] Uang " .. tostring(amount) .. " >= limit! Kick dan rejoin...")
+                    AML.Enabled = false
+                    task.wait(0.5)
+                    -- Kick sendiri → trigger Auto Reconnect + Auto Execute
+                    LocalPlayer:Kick("[AutoLimit] Uang sudah mencapai batas, rejoin otomatis!")
+                    return
+                end
+            end
+            print("[AutoMoneyLimit] Monitor berhenti")
+        end)
+    end
+
+    function AML.Stop()
+        AML.Enabled = false
+        if AML.Thread then
+            task.cancel(AML.Thread)
+            AML.Thread = nil
+        end
+    end
+
+    function AML.SetLimit(amount)
+        AML.LimitAmount = amount
+    end
+
+    return AML
+end)()
+
+-- =============================================
 -- GUI - TAB JOB
 -- =============================================
 
@@ -1436,6 +1570,36 @@ JobSection:AddToggle({
             task.spawn(startBaristaLoop)
         else
             baristaRunning = false
+        end
+    end
+})
+
+JobSection:AddParagraph({
+    Title = "Auto Rejoin by Money Limit",
+    Content = "Otomatis kick + rejoin kalau TotalLabel sudah capai limit.\nPastikan Auto Reconnect & Auto Execute sudah ON sebelum aktifin fitur ini!"
+})
+
+JobSection:AddInput({
+    Title = "Money Limit (angka)",
+    Default = "70000000",
+    Placeholder = "Contoh: 70000000",
+    Callback = function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            AutoMoneyLimit.SetLimit(num)
+            print("[AutoMoneyLimit] Limit diset ke:", num)
+        end
+    end
+})
+
+JobSection:AddToggle({
+    Title = "Auto Rejoin by Money Limit",
+    Default = false,
+    Callback = function(on)
+        if on then
+            AutoMoneyLimit.Start()
+        else
+            AutoMoneyLimit.Stop()
         end
     end
 })
@@ -1670,7 +1834,7 @@ local AutoRejoin = (function()
     -- WARNING: Ganti SCRIPT_URL dengan URL script UTAMA (misal pastebin/github raw cobadds.lua lo)
     -- JANGAN pakai URL vyperui.lua karena itu cuma UI-nya saja!
     local SCRIPT_URL = "https://raw.githubusercontent.com/SapuLidi-Eak/mantaplek123/refs/heads/main/coba.lua" 
-    local EXEC_DELAY = 20 -- detik tunggu sebelum execute setelah rejoin (dilebihin dikit biar game load)
+    local EXEC_DELAY = 5 -- detik tunggu sebelum execute setelah rejoin (dilebihin dikit biar game load)
 
     -- Cari queue_on_teleport dari berbagai executor secara aman
     local function getQueueOnTeleport()

@@ -470,41 +470,80 @@ end
 -- TRY START JOB
 -- =================================================================
 local function tryStartJob(sid)
+    local JOB_START_WALK_POS = Vector3.new(-4991.52, 4.29, -714.94)
+
     while BaristaModule.running and isSessionAlive(sid) and _G.KingVypersRunning do
         if isJobActive() then return true end
 
-        walkFix(JOB_VEC, sid)
-        if not isSessionAlive(sid) then return false end
+        -- Coba set posisi kamera target sebelum jalan biar prompt langsung kebaca pas nongol
+        pcall(function()
+            local cam = workspace.CurrentCamera
+            local camPos = Vector3.new(-5002.21, 12.17, -716.06)
+            local camLook = Vector3.new(0.8552, -0.5104, 0.0894)
+            cam.CFrame = CFrame.new(camPos, camPos + camLook)
+        end)
 
-        local arrived = waitArrived(JOB_VEC, 15, sid)
-        if not isSessionAlive(sid) then return false end
-        if not arrived then task.wait(15) continue end
+        -- Mulai jalan
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum:MoveTo(JOB_START_WALK_POS) end
 
-        task.wait(0.3)
-        rotateCamera()
-        task.wait(0.3)
-
+        -- Jalan sambil cek prompt (selama jalan ke tujuan)
+        local t = tick()
         local jobPrompt = nil
-        local jpT       = tick()
-        local camAngle  = 0
-        while not jobPrompt and tick() - jpT < 15 and BaristaModule.running and isSessionAlive(sid) do
+        local arrived = false
+
+        while tick() - t < 15 and BaristaModule.running and isSessionAlive(sid) do
+            if not isSessionAlive(sid) then return false end
+            if hum and hum.SeatPart then unsit() task.wait(0.2) hum:MoveTo(JOB_START_WALK_POS) end
+            
             jobPrompt = getJobPrompt()
-            if not jobPrompt then
-                camAngle = camAngle + 30
-                pcall(function()
-                    local cam = workspace.CurrentCamera
-                    cam.CFrame = CFrame.new(cam.CFrame.Position) * CFrame.Angles(0, math.rad(camAngle), 0)
-                end)
-                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if hrp and (hrp.Position - JOB_VEC).Magnitude > ARRIVE_DIST then
-                    walkFix(JOB_VEC, sid)
-                    if not isSessionAlive(sid) then return false end
+            if jobPrompt and jobPrompt.Enabled then break end -- Kalo nemu prompt, hajar langsung!
+            
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and (hrp.Position - JOB_START_WALK_POS).Magnitude < ARRIVE_DIST then 
+                arrived = true 
+                break 
+            end
+            task.wait(0.1)
+        end
+
+        if not isSessionAlive(sid) then return false end
+
+        -- Kalo stuck dan gak nemu prompt sama sekali
+        if not arrived and not jobPrompt then
+            task.wait(5)
+            continue
+        end
+
+        if not jobPrompt then jobPrompt = getJobPrompt() end
+
+        -- Kalau masih belom nemu, rotate camera pelan-pelan buat nyari
+        if not jobPrompt then
+            rotateCamera()
+            task.wait(0.3)
+            
+            local jpT       = tick()
+            local camAngle  = 0
+            while not jobPrompt and tick() - jpT < 15 and BaristaModule.running and isSessionAlive(sid) do
+                jobPrompt = getJobPrompt()
+                if not jobPrompt then
+                    camAngle = camAngle + 30
+                    pcall(function()
+                        local cam = workspace.CurrentCamera
+                        cam.CFrame = CFrame.new(cam.CFrame.Position) * CFrame.Angles(0, math.rad(camAngle), 0)
+                    end)
+                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp and (hrp.Position - JOB_START_WALK_POS).Magnitude > ARRIVE_DIST then
+                        if hum then hum:MoveTo(JOB_START_WALK_POS) end
+                    end
+                    task.wait(0.4)
                 end
-                task.wait(0.4)
             end
         end
+
         if not isSessionAlive(sid) then return false end
-        if not jobPrompt then task.wait(15) continue end
+        if not jobPrompt then task.wait(5) continue end
 
         -- Hold JobPrompt
         pcall(function()
@@ -527,7 +566,7 @@ local function tryStartJob(sid)
         end
 
         if confirmed then return true end
-        task.wait(15)
+        task.wait(5)
     end
     return false
 end
@@ -575,9 +614,10 @@ local function doSetup()
     if not (motor and hrp) then BaristaModule.running = false return end
 
     pcall(function()
-        motor:SetPrimaryPartCFrame(CFrame.new(JOB_POS.X, JOB_POS.Y, JOB_POS.Z))
+        local tPos = Vector3.new(-5005.13, 4.29, -716.64)
+        motor:SetPrimaryPartCFrame(CFrame.new(tPos))
         task.wait(0.1)
-        hrp.CFrame = CFrame.new(JOB_POS.X, JOB_POS.Y + 2, JOB_POS.Z)
+        hrp.CFrame = CFrame.new(tPos.X, tPos.Y + 2, tPos.Z)
     end)
     task.wait(1)
     if not isSessionAlive(sid) then return end

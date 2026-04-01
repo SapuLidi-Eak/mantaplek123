@@ -613,9 +613,12 @@ task.spawn(function()
             local elapsed = tick() - BaristaModule.startTime
             if elapsed >= (BaristaModule.kickLimitMinutes * 60) then
                 print("[Barista] ⏰ Kick limit tercapai! Kick sekarang...")
+                if BaristaModule.onKickEvent then
+                    pcall(BaristaModule.onKickEvent, "Sesi Barista mencapai limit (" .. BaristaModule.kickLimitMinutes .. " menit). Kick untuk safety!")
+                end
                 BaristaModule.running = false
                 newSession()
-                task.wait(1)
+                task.wait(2)
                 LocalPlayer:Kick("[KingVypers] Auto Farm Limited - For your safety Rejoin")
                 return
             end

@@ -232,7 +232,7 @@ local function doFixMachine(sid)
     if supplyPrompt then
         pcall(function()
             supplyPrompt:InputHoldBegin()
-            task.wait(supplyPrompt.HoldDuration + 0.05)
+            task.wait(supplyPrompt.HoldDuration + 0.5)
             supplyPrompt:InputHoldEnd()
         end)
     end

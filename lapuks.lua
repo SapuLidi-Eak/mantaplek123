@@ -47,6 +47,10 @@ BaristaModule.timeoutMax       = 90
 BaristaModule.kickLimitEnabled = false
 BaristaModule.kickLimitMinutes = 120
 
+-- Webhook callback — di-set dari dds.lua setelah module di-load
+-- Contoh: BaristaModule.onRepairEvent = sendWebhookRepairEvent
+BaristaModule.onRepairEvent = nil
+
 -- =================================================================
 -- POSISI
 -- =================================================================
@@ -54,11 +58,7 @@ local BREW_POS    = Vector3.new(-4998.09,     4.51,      -793.85)
 local SERVE_POS   = Vector3.new(-4995.49,     4.28,      -761.86)
 local MACHINE_POS = Vector3.new(-5113.675781, 3.189320,  -672.781311)
 local JOB_POS     = { Name = "Barista", TeamId = 11378976, X = -4990.60, Y = 4.51, Z = -715.17 }
--- Posisi persis player saat mau ngambil job (dari screenshot di game)
-local JOB_VEC     = Vector3.new(-4989.03, 4.29, -715.06)
-local JOB_LOOK    = Vector3.new(0.9988, 0, 0.0488)          -- arah hadap player
-local JOB_CAM_POS = Vector3.new(-4992.37, 9.01, -706.65)    -- posisi kamera
-local JOB_CAM_LOOK = Vector3.new(0.3475, -0.3360, -0.8754)  -- arah kamera
+local JOB_VEC     = Vector3.new(JOB_POS.X, JOB_POS.Y, JOB_POS.Z)
 local ARRIVE_DIST = 5
 
 -- =================================================================
@@ -207,6 +207,11 @@ local function doFixMachine(sid)
     BaristaModule.fixingMachine   = true
     BaristaModule.noclipEnabled   = true
 
+    -- Notif webhook: mesin rusak
+    if BaristaModule.onRepairEvent then
+        pcall(BaristaModule.onRepairEvent, "broken")
+    end
+
     walkFix(MACHINE_POS, sid)
     if not isSessionAlive(sid) then
         BaristaModule.noclipEnabled = false
@@ -232,11 +237,12 @@ local function doFixMachine(sid)
     if supplyPrompt then
         pcall(function()
             supplyPrompt:InputHoldBegin()
-            task.wait(supplyPrompt.HoldDuration + 0.5)
+            task.wait(supplyPrompt.HoldDuration + 0.05)
             supplyPrompt:InputHoldEnd()
         end)
     end
 
+    -- Tunggu konfirmasi label hilang (mesin selesai diperbaiki)
     local waitT     = tick() + 15
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
     while tick() < waitT do
@@ -248,6 +254,10 @@ local function doFixMachine(sid)
     end
 
     if isSessionAlive(sid) then
+        -- Notif webhook: mesin selesai diperbaiki
+        if BaristaModule.onRepairEvent then
+            pcall(BaristaModule.onRepairEvent, "fixed")
+        end
         walkFix(BREW_POS, sid)
         task.wait(0.5)
     end
@@ -471,28 +481,8 @@ local function tryStartJob(sid)
         if not arrived then task.wait(15) continue end
 
         task.wait(0.3)
-
-        -- Set posisi & arah hadap player persis ke koordinat yang sudah dicatat
-        pcall(function()
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.CFrame = CFrame.lookAt(
-                    JOB_VEC,
-                    JOB_VEC + JOB_LOOK
-                )
-            end
-        end)
-        task.wait(0.2)
-
-        -- Set kamera ke posisi & arah yang sudah dicatat (JobPrompt langsung keliatan)
-        pcall(function()
-            local cam = workspace.CurrentCamera
-            cam.CFrame = CFrame.lookAt(
-                JOB_CAM_POS,
-                JOB_CAM_POS + JOB_CAM_LOOK
-            )
-        end)
-        task.wait(0.2)
+        rotateCamera()
+        task.wait(0.3)
 
         local jobPrompt = nil
         local jpT       = tick()
@@ -500,7 +490,6 @@ local function tryStartJob(sid)
         while not jobPrompt and tick() - jpT < 15 and BaristaModule.running and isSessionAlive(sid) do
             jobPrompt = getJobPrompt()
             if not jobPrompt then
-                -- Fallback: putar kamera pelan kalau prompt belum kedeteksi
                 camAngle = camAngle + 30
                 pcall(function()
                     local cam = workspace.CurrentCamera
@@ -718,4 +707,3 @@ end
 
 print("[Barista Module] ✅ Loaded! Gunakan BaristaModule:Start() untuk mulai.")
 return BaristaModule
-
